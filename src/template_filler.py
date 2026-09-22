@@ -448,4 +448,20 @@ class TemplateFiller:
             return
 
         part = self.doc.part.related_parts.get(r_id)
-        if part
+        if part is None:
+            return
+
+        with open(new_image_path, "rb") as f:
+            new_bytes = f.read()
+
+        part._blob = new_bytes
+
+        ext = Path(new_image_path).suffix.lower().lstrip(".")
+        ct_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                  "png": "image/png", "gif": "image/gif",
+                  "bmp": "image/bmp"}
+        if ext in ct_map:
+            try:
+                part._content_type = ct_map[ext]
+            except Exception:
+                pass
