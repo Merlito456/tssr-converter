@@ -1,38 +1,57 @@
-from docxtpl import DocxTemplate, InlineImage
-from docx.shared import Mm
-import os
+from src.template_filler import TemplateFiller
+from pathlib import Path
+
 
 class TSSRGenerator:
-    """
-    Renders the Nokia template with text + images.
-    Requires the template to have {{ }} placeholders.
-    """
-
     def __init__(self, template_path: str):
-        self.doc = DocxTemplate(template_path)
-
-    def _prep_images(self, image_paths, width_mm=80):
-        """Convert file paths to InlineImage objects."""
-        images = []
-        for p in image_paths:
-            if os.path.exists(p):
-                try:
-                    images.append(InlineImage(self.doc, p, width=Mm(width_mm)))
-                except Exception as e:
-                    print(f"[WARN] Could not embed {p}: {e}")
-        return images
+        self.template_path = template_path
 
     def generate(self, context: dict, image_map: dict, output_path: str) -> str:
-        """
-        Args:
-            context:   Jinja2 variables for text fields
-            image_map: dict like {"vicinity_map": [path1], "antenna_photos": [path2, path3]}
-            output_path: where to save the .docx
-        """
-        # Add images into the context
-        for key, paths in image_map.items():
-            context[f"{key}_images"] = self._prep_images(paths)
+        filler = TemplateFiller(self.template_path)
 
-        self.doc.render(context)
-        self.doc.save(output_path)
+        # 1. Text replacements
+        filler.fill_text(context)
+
+        # 2. Rectifier tables
+        filler.fill_rectifier_1(context)
+        filler.fill_rectifier_2(context)
+
+        # 3. Image replacement
+        # Flatten image_map into the keys the filler expects
+        flat = self._flatten_images(image_map)
+        filler.replace_images(flat)
+
+        # 4. Save
+        filler.save(output_path)
         return output_path
+
+    def _flatten_images(self, image_map: dict) -> dict:
+        """
+        Ericsson image sections → Nokia slot keys.
+
+        The Ericsson PDF has these sections (from ImageExtractor):
+            vicinity_map_and_site_photos
+            proposed_space
+            room_layout
+            cable_routing
+        """
+        vmp    = image_map.get("vicinity_map_and_site_photos", [])
+        prop   = image_map.get("proposed_space", [])
+        room   = image_map.get("room_layout", [])
+        cable  = image_map.get("cable_routing", [])
+
+        def pick(lst, i):
+            if not lst:
+                return None
+            return lst[i] if i < len(lst) else lst[-1]
+
+        return {
+            "vicinity_map":     pick(vmp, 0),
+            "site_photo_1":     pick(vmp, 1),
+            "site_photo_2":     pick(vmp, 2),
+            "proposed_space_1": pick(prop, 0),
+            "proposed_space_2": pick(prop, 1),
+            "trs_diagram":      pick(prop, 2),
+            "room_layout":      pick(room, 0),
+            "cable_routing":    pick(cable, 0),
+        }
