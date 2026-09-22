@@ -11,6 +11,7 @@ Public API:
 
 import re
 from typing import Dict, Any, List, Optional
+from src.image_extractor import ImageExtractor  
 
 import pdfplumber
 
